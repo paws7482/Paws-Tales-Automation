@@ -1,0 +1,10 @@
+# Generated runtime artifacts
+data/*.jsonl
+out/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.env

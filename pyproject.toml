@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paws-tales-automation"
+version = "0.1.0"
+description = "Automated original YouTube Shorts production pipeline for Paws & Tales."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+youtube = ["google-api-python-client>=2.140.0", "google-auth-oauthlib>=1.2.0"]
+
+test = ["pytest>=8.0.0"]
+
+[project.scripts]
+paws-tales = "paws_tales.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
