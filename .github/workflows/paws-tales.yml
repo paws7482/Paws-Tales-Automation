@@ -1,0 +1,59 @@
+name: Paws & Tales Automation
+
+on:
+  workflow_dispatch:
+    inputs:
+      language:
+        description: Story language to generate
+        required: true
+        default: en
+        type: choice
+        options: [en, hi]
+  schedule:
+    # GitHub cron is UTC. These map to 06:30, 08:30, 13:30, and 19:30 Asia/Kolkata.
+    - cron: '0 1 * * *'
+    - cron: '0 3 * * *'
+    - cron: '0 8 * * *'
+    - cron: '0 14 * * *'
+
+concurrency:
+  group: paws-tales-${{ github.workflow }}-${{ github.ref }}-${{ github.event.schedule || inputs.language }}
+  cancel-in-progress: false
+
+jobs:
+  generate-story:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Determine language
+        id: lang
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ inputs.language }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 1 * * *" ] || [ "${{ github.event.schedule }}" = "0 3 * * *" ]; then
+            echo "value=en" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=hi" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Validate configuration
+        run: python -m paws_tales.cli validate-config
+      - name: Generate story and manifest
+        run: python -m paws_tales.cli generate-story --language "${{ steps.lang.outputs.value }}" --manifest
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      - name: Commit generated history and manifests
+        run: |
+          if git diff --quiet; then
+            echo "No generated changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f data/*.jsonl out
+          git commit -m "chore: add generated Paws & Tales story"
+          git push
