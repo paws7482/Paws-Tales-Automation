@@ -10,6 +10,7 @@ Paws & Tales is a production-oriented automation project for original, family-fr
 - Produces unique metadata for each Short, including title, description, tags, keywords, playlist, thumbnail concept, and AI/altered-content disclosure flag.
 - Provides a real YouTube upload integration boundary that requires OAuth secrets and the YouTube optional dependency; uploads are blocked when secrets are absent.
 - Includes a GitHub Actions workflow using UTC cron entries for the initial India-time publishing schedule.
+- Provides reusable retry, scheduling, and analytics snapshot helpers for production pipeline stages.
 
 ## Initial publishing schedule
 
@@ -36,6 +37,8 @@ Generated history is written to `data/story_history.jsonl`. Production handoff m
 Do not hard-code secrets. Configure these through environment variables or GitHub Secrets:
 
 - `OPENAI_API_KEY`: Required for production story generation.
+- `OPENAI_MODEL`: Optional story model override; defaults to `gpt-4o-mini`.
+- `OPENAI_API_URL`: Optional HTTPS endpoint override for compatible chat-completions deployments.
 - `YOUTUBE_CLIENT_SECRETS_JSON`: OAuth client configuration JSON.
 - `YOUTUBE_TOKEN_JSON`: Authorized OAuth token JSON.
 - `YOUTUBE_PRIVACY_STATUS`: Optional; defaults to `private`.

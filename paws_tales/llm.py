@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -10,6 +9,7 @@ from typing import Protocol
 
 from .config import AppConfig, ConfigError
 from .models import Language, StoryRecord
+from .retry import RetryPolicy, run_with_retries
 
 
 class StoryProvider(Protocol):
@@ -22,8 +22,8 @@ class OpenAIStoryProvider:
     """Production story provider using OpenAI's Chat Completions-compatible HTTP API."""
 
     config: AppConfig
-    model: str = "gpt-4o-mini"
-    api_url: str = "https://api.openai.com/v1/chat/completions"
+    model: str | None = None
+    api_url: str | None = None
 
     def create_story(self, language: Language, previous: list[StoryRecord]) -> StoryRecord:
         api_key = os.getenv("OPENAI_API_KEY")
@@ -31,7 +31,7 @@ class OpenAIStoryProvider:
             raise ConfigError("OPENAI_API_KEY is required for production story generation.")
         prompt = self._prompt(language, previous)
         payload = {
-            "model": self.model,
+            "model": self.model or self.config.openai_model,
             "response_format": {"type": "json_object"},
             "messages": [
                 {"role": "system", "content": "You create original, family-friendly YouTube Shorts animal stories only."},
@@ -55,22 +55,23 @@ class OpenAIStoryProvider:
     def _post_json(self, payload: dict[str, object], api_key: str) -> dict[str, object]:
         body = json.dumps(payload).encode("utf-8")
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        last_error: Exception | None = None
-        for attempt in range(1, self.config.max_retries + 1):
-            request = urllib.request.Request(self.api_url, data=body, headers=headers, method="POST")
-            try:
-                with urllib.request.urlopen(request, timeout=self.config.request_timeout_seconds) as response:
-                    return json.loads(response.read().decode("utf-8"))
-            except urllib.error.HTTPError as exc:
-                last_error = exc
-                if exc.code not in {408, 409, 429, 500, 502, 503, 504} or attempt == self.config.max_retries:
-                    raise RuntimeError(f"OpenAI story request failed with HTTP {exc.code}.") from exc
-            except (urllib.error.URLError, TimeoutError) as exc:
-                last_error = exc
-                if attempt == self.config.max_retries:
-                    raise RuntimeError("OpenAI story request failed after retries.") from exc
-            time.sleep(min(2 ** attempt, 10))
-        raise RuntimeError("OpenAI story request failed.") from last_error
+        def request_once() -> dict[str, object]:
+            request = urllib.request.Request(self.api_url or self.config.openai_api_url, data=body, headers=headers, method="POST")
+            with urllib.request.urlopen(request, timeout=self.config.request_timeout_seconds) as response:
+                return json.loads(response.read().decode("utf-8"))
+
+        try:
+            return run_with_retries(
+                request_once,
+                RetryPolicy(attempts=self.config.max_retries),
+                (urllib.error.HTTPError, urllib.error.URLError, TimeoutError),
+                retryable_statuses={408, 409, 429, 500, 502, 503, 504},
+                status_getter=lambda exc: exc.code if isinstance(exc, urllib.error.HTTPError) else 408,
+            )
+        except urllib.error.HTTPError as exc:
+            raise RuntimeError(f"OpenAI story request failed with HTTP {exc.code}.") from exc
+        except (urllib.error.URLError, TimeoutError) as exc:
+            raise RuntimeError("OpenAI story request failed after retries.") from exc
 
     def _prompt(self, language: Language, previous: list[StoryRecord]) -> str:
         recent = [

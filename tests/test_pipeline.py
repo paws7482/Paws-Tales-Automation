@@ -76,3 +76,34 @@ def test_production_story_provider_requires_openai_key(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(ConfigError):
         OpenAIStoryProvider(AppConfig()).create_story(Language.ENGLISH, [])
+
+
+def test_config_accepts_openai_overrides(monkeypatch):
+    monkeypatch.setenv("OPENAI_MODEL", "story-model")
+    monkeypatch.setenv("OPENAI_API_URL", "https://api.example.test/v1/chat/completions")
+    config = AppConfig.from_env()
+    config.validate()
+    assert config.openai_model == "story-model"
+    assert config.openai_api_url == "https://api.example.test/v1/chat/completions"
+
+
+def test_scheduler_maps_ist_slot_to_utc():
+    from paws_tales.config import DEFAULT_SLOTS
+    from paws_tales.scheduler import cron_minute_hour_for_slot
+
+    assert cron_minute_hour_for_slot(DEFAULT_SLOTS[0]) == (0, 1)
+    assert cron_minute_hour_for_slot(DEFAULT_SLOTS[1]) == (0, 3)
+    assert cron_minute_hour_for_slot(DEFAULT_SLOTS[2]) == (0, 8)
+    assert cron_minute_hour_for_slot(DEFAULT_SLOTS[3]) == (0, 14)
+
+
+def test_attach_analytics_snapshot():
+    from paws_tales.analytics import PerformanceSnapshot, attach_snapshot
+
+    config = AppConfig()
+    provider = TemplateStoryProvider(config, random.Random(5))
+    story = StoryGenerator(config, provider=provider).generate(Language.ENGLISH, [])
+    snapshot = PerformanceSnapshot.from_youtube_metrics(story.story_id, {"views": 12, "countries": ["US", "CA"]})
+    updated = attach_snapshot(story, snapshot)
+    assert snapshot.captured_at in updated.performance_metrics
+    assert updated.performance_metrics[snapshot.captured_at]["views"] == 12

@@ -30,6 +30,8 @@ class AppConfig:
     request_timeout_seconds: int = 60
     max_retries: int = 3
     youtube_privacy_status: str = "private"
+    openai_model: str = "gpt-4o-mini"
+    openai_api_url: str = "https://api.openai.com/v1/chat/completions"
     english_playlist: str = "English Animal Stories"
     hindi_playlist: str = "Hindi Animal Stories"
     publishing_slots: tuple[PublishingSlot, ...] = field(default_factory=lambda: DEFAULT_SLOTS)
@@ -46,6 +48,8 @@ class AppConfig:
             request_timeout_seconds=int(os.getenv("PAWS_REQUEST_TIMEOUT_SECONDS", "60")),
             max_retries=int(os.getenv("PAWS_MAX_RETRIES", "3")),
             youtube_privacy_status=os.getenv("YOUTUBE_PRIVACY_STATUS", "private"),
+            openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            openai_api_url=os.getenv("OPENAI_API_URL", "https://api.openai.com/v1/chat/completions"),
         )
 
     def validate(self, require_youtube: bool = False) -> None:
@@ -55,6 +59,10 @@ class AppConfig:
             raise ConfigError("Video duration limits are invalid.")
         if self.max_retries < 1:
             raise ConfigError("PAWS_MAX_RETRIES must be at least 1.")
+        if not self.openai_model.strip():
+            raise ConfigError("OPENAI_MODEL must not be empty.")
+        if not self.openai_api_url.startswith("https://"):
+            raise ConfigError("OPENAI_API_URL must be an HTTPS URL.")
         if require_youtube:
             missing = [name for name in ("YOUTUBE_CLIENT_SECRETS_JSON", "YOUTUBE_TOKEN_JSON") if not os.getenv(name)]
             if missing:
